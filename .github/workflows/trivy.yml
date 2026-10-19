@@ -1,0 +1,56 @@
+name: Container Security Scanner
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  container-spec-scan:
+    name: Container OS and Runtime Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Check out your repository
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Step 2: Run Trivy targeting only Container Security metrics (No Docker needed)
+      - name: Run Trivy Container Security Gate
+        uses: aquasecurity/trivy-action@v0.36.0 #
+        with:
+          scan-type: 'rootfs'        # Scans directories acting as container root filesystems
+          scan-ref: '.'              # Evaluates the root structure layout
+          scanners: 'vuln'           # STRICT CONTAINER FOCUS: Looks purely for software/OS vulnerabilities
+          vuln-type: 'os,library'    # Only targets base OS flaws and language dependencies
+          format: 'table'            # Outputs a clean terminal interface layout
+          exit-code: '1'             # THE GATE: Fails the pipeline if conditions are met
+          ignore-unfixed: true       # Filters out unpatchable CVEs to avoid false blockages
+          severity: 'HIGH,CRITICAL'  # Strict enforcement only for High & Critical issues
+
+
+
+
+      # Step 2a: Scan everything to generate a complete JSON report (Does NOT fail the build)
+      - name: Generate Complete Security Report
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: 'rootfs'
+          scan-ref: '.'
+          scanners: 'vuln'
+          vuln-type: 'os,library'
+          format: 'json'
+          output: 'trivy-results.json'
+          exit-code: '0'              # ALWAYS passes (0) so the report builds fully
+          severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL' # Scans every tier
+
+      # Step 2b: Run a second quick check to act as the strict Security Gate
+      - name: Enforce Security Gate
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: 'rootfs'
+          scan-ref: '.'
+          scanners: 'vuln'
+          vuln-type: 'os,library'
+          format: 'table'             # Prints a quick clean table to the GitHub log
+          exit-code: '1'              # FAILS the build if vulnerabilities are found
+          ignore-unfixed: true
+          severity: 'HIGH,CRITICAL'   # Only breaks the build for these two
